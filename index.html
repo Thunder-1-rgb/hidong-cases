@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>嗨动视觉案例查询系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC",sans-serif;background:#f0f2f5;color:#333}
+.header{background:linear-gradient(135deg,#1a237e,#283593,#1565c0);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.header h1{font-size:20px;font-weight:600;letter-spacing:1px}
+.header .stats{font-size:13px;opacity:.85}
+
+.filter-bar{background:#fff;padding:10px 24px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:52px;z-index:99}
+.filter-bar label{font-size:13px;color:#666;font-weight:500}
+.filter-bar select{padding:6px 28px 6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23999'/%3E%3C/svg%3E") no-repeat right 8px center;appearance:none;cursor:pointer;min-width:100px}
+.filter-bar select:hover{border-color:#1565c0}
+.filter-bar .btn-reset{padding:6px 14px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;background:#fff;cursor:pointer;color:#666}
+.filter-bar .btn-reset:hover{color:#1565c0;border-color:#1565c0}
+.filter-bar .count-badge{margin-left:auto;font-size:13px;color:#1565c0;font-weight:600}
+.filter-bar .dbg{font-size:11px;color:#e53935;margin-left:8px;display:none}
+
+.main{padding:16px 24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);transition:transform .2s,box-shadow .2s;cursor:pointer}
+.card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.card .img-wrap{width:100%;height:170px;overflow:hidden;position:relative;background:#f5f5f5}
+.card .img-wrap img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.card:hover .img-wrap img{transform:scale(1.05)}
+.card .img-wrap .img-count{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px}
+.card .info{padding:10px 12px}
+.card .info h3{font-size:13px;font-weight:600;margin-bottom:6px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .info .tags{display:flex;flex-wrap:wrap;gap:4px}
+.card .info .tag{font-size:11px;padding:2px 7px;border-radius:3px;background:#e3f2fd;color:#1565c0}
+.card .info .tag.s2{background:#e8f5e9;color:#2e7d32}
+.card .info .tag.s3{background:#fff3e0;color:#e65100}
+
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:center}
+.modal-overlay.active{display:flex}
+.modal{background:#fff;border-radius:12px;width:92%;max-width:880px;max-height:92vh;overflow:auto;position:relative}
+.modal .close-btn{position:absolute;top:12px;right:16px;width:32px;height:32px;border:none;background:rgba(0,0,0,.3);color:#fff;border-radius:50%;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}
+.modal .close-btn:hover{background:rgba(0,0,0,.5)}
+
+.carousel{position:relative;width:100%;height:420px;background:#1a1a1a;overflow:hidden}
+.carousel .slides{display:flex;transition:transform .4s ease;height:100%}
+.carousel .slides .slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
+.carousel .slides .slide img{max-width:100%;max-height:100%;object-fit:contain}
+.carousel .slides .slide .img-loading{position:absolute;color:#888;font-size:14px}
+.carousel .nav-btn{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:18px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:5;transition:background .2s}
+.carousel .nav-btn:hover{background:rgba(255,255,255,.4)}
+.carousel .nav-btn.prev{left:12px}
+.carousel .nav-btn.next{right:12px}
+.carousel .dots{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+.carousel .dots .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.4);cursor:pointer;transition:background .2s}
+.carousel .dots .dot.active{background:#fff;transform:scale(1.2)}
+.carousel .slide-counter{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.5);color:#fff;font-size:12px;padding:4px 10px;border-radius:10px}
+
+.modal-detail{padding:20px 24px}
+.modal-detail h2{font-size:19px;margin-bottom:12px}
+.modal-detail .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.modal-detail .meta span{font-size:13px;padding:4px 12px;border-radius:4px}
+.modal-detail .meta .m1{background:#e3f2fd;color:#1565c0}
+.modal-detail .meta .m2{background:#e8f5e9;color:#2e7d32}
+.modal-detail .meta .m3{background:#fff3e0;color:#e65100}
+.modal-detail .meta .m4{background:#f3e5f5;color:#7b1fa2}
+.modal-detail .desc{font-size:14px;color:#555;line-height:1.8}
+.modal-detail .desc h4{font-size:14px;color:#333;margin:12px 0 6px}
+.modal-detail .desc .product-list{display:flex;flex-wrap:wrap;gap:6px}
+.modal-detail .desc .product-list .p-tag{font-size:12px;padding:3px 10px;background:#f5f5f5;border-radius:12px;color:#666}
+.modal-detail .source{font-size:12px;color:#999;margin-top:12px;padding-top:8px;border-top:1px solid #eee}
+
+.empty{text-align:center;padding:60px 20px;color:#999;font-size:15px}
+.loading{text-align:center;padding:60px;color:#999;font-size:15px}
+.error{text-align:center;padding:40px;color:#e53935;font-size:14px}
+
+@media(max-width:640px){
+  .filter-bar{padding:8px 12px;gap:5px}
+  .filter-bar select{min-width:80px;font-size:12px;padding:5px 22px 5px 8px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .card .img-wrap{height:110px}
+  .card .info h3{font-size:12px}
+  .carousel{height:220px}
+  .modal{width:96%}
+  .header h1{font-size:16px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>嗨动视觉案例查询系统</h1>
+  <div class="stats" id="headerStats">加载中...</div>
+</div>
+
+<div class="filter-bar">
+  <label>行业</label>
+  <select id="filterIndustry"><option value="">全部行业</option></select>
+  <label>场景</label>
+  <select id="filterScenario"><option value="">全部场景</option></select>
+  <label>地域</label>
+  <select id="filterRegion"><option value="">全部地域</option></select>
+  <label>产品</label>
+  <select id="filterProduct"><option value="">全部产品</option></select>
+  <button class="btn-reset" id="btnReset">重置</button>
+  <span class="count-badge" id="countBadge"></span>
+  <span class="dbg" id="dbgMsg"></span>
+</div>
+
+<div class="main">
+  <div class="loading" id="loadingMsg">正在加载案例数据...</div>
+  <div class="error" id="errorMsg" style="display:none"></div>
+  <div class="grid" id="cardGrid"></div>
+  <div class="empty" id="emptyMsg" style="display:none">没有匹配的案例，请调整筛选条件</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="close-btn" id="closeModal">&times;</button>
+    <div class="carousel" id="carousel">
+      <div class="slides" id="carouselSlides"></div>
+      <button class="nav-btn prev" id="prevBtn">&lt;</button>
+      <button class="nav-btn next" id="nextBtn">&gt;</button>
+      <div class="slide-counter" id="slideCounter"></div>
+      <div class="dots" id="carouselDots"></div>
+    </div>
+    <div class="modal-detail" id="modalDetail"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[];
+
+  function $id(s){return document.getElementById(s)}
+
+  function log(msg){
+    var d=$id('dbgMsg');
+    d.textContent=msg;
+    d.style.display='block';
+    console.log('[CaseSys]', msg);
+  }
+
+  function populate(id, arr){
+    var sel=$id(id);
+    var first=sel.querySelector('option'); 
+    sel.innerHTML='';
+    if(first) sel.appendChild(first.cloneNode(true));
+    var frag=document.createDocumentFragment();
+    arr.forEach(function(v){
+      var o=document.createElement('option');
+      o.value=v;
+      o.textContent=v;
+      frag.appendChild(o);
+    });
+    sel.appendChild(frag);
+  }
+
+  function applyFilters(){
+    var ind=$id('filterIndustry').value;
+    var scn=$id('filterScenario').value;
+    var reg=$id('filterRegion').value;
+    var prd=$id('filterProduct').value;
+
+    filteredCases=allCases.filter(function(c){
+      if(ind && c.industry!==ind) return false;
+      if(scn && c.scenario!==scn) return false;
+      if(reg && c.region.indexOf(reg)!==0) return false;
+      if(prd && (!c.product_category||c.product_category.indexOf(prd)===-1)) return false;
+      return true;
+    });
+
+    log('筛选完成: '+filteredCases.length+' 条');
+    renderCards();
+    updateStats();
+  }
+
+  function initFilters(){
+    var industries=[], scenarios=[], regions=[], products=[];
+    var iSet={}, sSet={}, rSet={}, pSet={};
+
+    allCases.forEach(function(c){
+      if(c.industry && !iSet[c.industry]){iSet[c.industry]=1; industries.push(c.industry)}
+      if(c.scenario && !sSet[c.scenario]){sSet[c.scenario]=1; scenarios.push(c.scenario)}
+      if(c.region){var prov=c.region.match(/^(.+?(?:省|自治区|市|特别行政区))/);var pname=prov?prov[1]:c.region;if(!rSet[pname]){rSet[pname]=1; regions.push(pname)}}
+      if(c.product_category&&Array.isArray(c.product_category)){
+        c.product_category.forEach(function(p){
+          if(p && !pSet[p]){pSet[p]=1; products.push(p)}
+        });
+      }
+    });
+
+    industries.sort(); scenarios.sort(); regions.sort(); products.sort();
+
+    populate('filterIndustry', industries);
+    populate('filterScenario', scenarios);
+    populate('filterRegion', regions);
+    populate('filterProduct', products);
+
+    log('筛选器就绪: 行业'+industries.length+' 场景'+scenarios.length+
+        ' 地域'+regions.length+' 产品'+products.length);
+  }
+
+  function updateStats(){
+    $id('headerStats').textContent='共 '+allCases.length+' 个案例';
+    $id('countBadge').textContent='筛选: '+filteredCases.length+' 个';
+  }
+
+  function renderCards(){
+    var grid=$id('cardGrid'), empty=$id('emptyMsg');
+    if(!filteredCases.length){
+      grid.innerHTML='';
+      empty.style.display='block';
+      return;
+    }
+    empty.style.display='none';
+    var html='';
+    filteredCases.forEach(function(c,i){
+      var img=(c.images&&c.images.length) ? ('thumbnails/'+c.images[0].replace(/\.(png|gif|webp|bmp)$/i,'.jpg')) : '';
+      var cnt=c.images ? c.images.length : 0;
+      html+='<div class="card" data-idx="'+i+'"><div class="img-wrap">'+
+        '<img src="'+img+'" alt="" loading="lazy" onerror="this.parentElement.innerHTML=\'<div style=width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:14px>暂无图片</div>\'">'+
+        (cnt>1?'<span class="img-count">'+cnt+'张</span>':'')+'</div><div class="info"><h3>'+
+        (c.name||'未命名')+'</h3><div class="tags"><span class="tag">'+(c.industry||'未知')+
+        '</span><span class="tag s2">'+(c.scenario||'未知')+'</span><span class="tag s3">'+(c.region||'未知')+
+        '</span></div></div></div>';
+    });
+    grid.innerHTML=html;
+
+    // Bind click events via delegation instead of inline onclick
+    grid.querySelectorAll('.card').forEach(function(card){
+      card.addEventListener('click', function(){
+        var idx=parseInt(this.getAttribute('data-idx'));
+        if(!isNaN(idx) && idx>=0 && idx<filteredCases.length){
+          openDetail(idx);
+        }
+      });
+    });
+  }
+
+  function openDetail(i){
+    var c=filteredCases[i];
+    // Clone images array to avoid reference issues
+    currentCaseImages=(c.images||[]).slice();
+    currentSlide=0;
+
+    var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
+
+    if(!currentCaseImages.length){
+      slides.innerHTML='<div class="slide"><div style="color:#999;font-size:16px">暂无图片</div></div>';
+      dotsEl.innerHTML='';
+      counter.textContent='';
+    } else if(currentCaseImages.length===1){
+      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
+      dotsEl.innerHTML='';
+      counter.textContent='';
+    } else {
+      // Build slides: first image eager, rest lazy
+      var slidesHtml='';
+      for(var j=0;j<currentCaseImages.length;j++){
+        var lazyAttr=j===0?'':' loading="lazy"';
+        slidesHtml+='<div class="slide">'+
+          '<span class="img-loading">加载中...</span>'+
+          '<img src="'+currentCaseImages[j]+'" alt="" style="display:none"'+lazyAttr+
+          ' onload="this.style.display=\'\';this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'" '+
+          'onerror="this.parentElement.querySelector(\'.img-loading\').textContent=\'加载失败\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'">'+
+        '</div>';
+      }
+      slides.innerHTML=slidesHtml;
+
+      // Dots
+      var dotsHtml='';
+      for(var k=0;k<currentCaseImages.length;k++){
+        dotsHtml+='<span class="dot'+(k===0?' active':'')+'" data-slide="'+k+'"></span>';
+      }
+      dotsEl.innerHTML=dotsHtml;
+
+      // Bind dot clicks
+      dotsEl.querySelectorAll('.dot').forEach(function(dot){
+        dot.addEventListener('click', function(){
+          goToSlide(parseInt(this.getAttribute('data-slide')));
+        });
+      });
+
+      counter.textContent='1 / '+currentCaseImages.length;
+    }
+
+    updateCarousel();
+
+    // Detail info
+    var products=(c.products||'').split(/[，,]/).map(function(p){return p.trim()}).filter(Boolean);
+    var productTags=(c.product_category||[]).map(function(pc){
+      return '<span class="m4">'+pc+'</span>';
+    }).join('');
+
+    $id('modalDetail').innerHTML=
+      '<h2>'+(c.name||'未命名')+'</h2>'+
+      '<div class="meta">'+
+        '<span class="m1">'+(c.industry||'未知')+'</span>'+
+        '<span class="m2">'+(c.scenario||'未知')+'</span>'+
+        '<span class="m3">'+(c.region||'未知')+'</span>'+
+        productTags+
+      '</div>'+
+      '<div class="desc">'+
+        '<h4>使用产品</h4>'+
+        '<div class="product-list">'+products.map(function(p){return '<span class="p-tag">'+p+'</span>'}).join('')+'</div>'+
+        (c.description?'<h4>案例描述</h4><p>'+c.description+'</p>':'')+
+      '</div>'+
+      '<div class="source">来源: '+(c.source_ppt||'未知')+'</div>';
+
+    $id('modalOverlay').classList.add('active');
+    document.body.style.overflow='hidden';
+  }
+
+  function goToSlide(n){
+    currentSlide=n;
+    updateCarousel();
+  }
+
+  function prevSlide(){
+    if(!currentCaseImages.length) return;
+    currentSlide=(currentSlide-1+currentCaseImages.length)%currentCaseImages.length;
+    updateCarousel();
+  }
+
+  function nextSlide(){
+    if(!currentCaseImages.length) return;
+    currentSlide=(currentSlide+1)%currentCaseImages.length;
+    updateCarousel();
+  }
+
+  function updateCarousel(){
+    $id('carouselSlides').style.transform='translateX(-'+currentSlide*100+'%)';
+    var dots=$id('carouselDots').querySelectorAll('.dot');
+    dots.forEach(function(d,j){d.classList.toggle('active',j===currentSlide)});
+    if(currentCaseImages.length>1){
+      $id('slideCounter').textContent=(currentSlide+1)+' / '+currentCaseImages.length;
+    }
+  }
+
+  function closeModal(){
+    $id('modalOverlay').classList.remove('active');
+    document.body.style.overflow='';
+  }
+
+  // Event bindings
+  $id('closeModal').addEventListener('click',closeModal);
+  $id('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal()});
+  $id('prevBtn').addEventListener('click',prevSlide);
+  $id('nextBtn').addEventListener('click',nextSlide);
+  document.addEventListener('keydown',function(e){
+    if(!$id('modalOverlay').classList.contains('active')) return;
+    if(e.key==='Escape') closeModal();
+    if(e.key==='ArrowLeft') prevSlide();
+    if(e.key==='ArrowRight') nextSlide();
+  });
+
+  // Touch swipe
+  var touchX=0;
+  $id('carousel').addEventListener('touchstart',function(e){touchX=e.touches[0].clientX});
+  $id('carousel').addEventListener('touchend',function(e){
+    var diff=touchX-e.changedTouches[0].clientX;
+    if(Math.abs(diff)>50) diff>0 ? nextSlide() : prevSlide();
+  });
+
+  // Filter change listeners
+  ['filterIndustry','filterScenario','filterRegion','filterProduct'].forEach(function(id){
+    $id(id).addEventListener('change', applyFilters);
+  });
+  $id('btnReset').addEventListener('click',function(){
+    ['filterIndustry','filterScenario','filterRegion','filterProduct'].forEach(function(id){
+      $id(id).value='';
+    });
+    applyFilters();
+  });
+
+  // Load data with cache-busting
+  $id('loadingMsg').style.display='block';
+
+  fetch('cases_data_enhanced.json?v='+Date.now())
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(data){
+      if(!data.cases||!Array.isArray(data.cases)){
+        throw new Error('数据格式错误：缺少 cases 数组');
+      }
+      allCases=data.cases;
+      $id('loadingMsg').style.display='none';
+
+      initFilters();
+      filteredCases=allCases.slice();
+      renderCards();
+      updateStats();
+
+      log('加载完成: '+allCases.length+' 条案例');
+    })
+    .catch(function(e){
+      $id('loadingMsg').style.display='none';
+      $id('errorMsg').style.display='block';
+      $id('errorMsg').textContent='数据加载失败: '+e.message+'，请按 Ctrl+F5 强制刷新页面重试';
+      log('加载失败: '+e.message);
+    });
+})();
+</script>
+</body>
+</html>
