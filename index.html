@@ -242,8 +242,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
   function openDetail(i){
     var c=filteredCases[i];
-    // Clone images array to avoid reference issues
-    currentCaseImages=(c.images||[]).slice();
+    // Clone images array and remap to images_web/ compressed JPEG
+    currentCaseImages=(c.images||[]).slice().map(function(img){
+      return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.jpeg');
+    });
     currentSlide=0;
 
     var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
@@ -253,17 +255,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       dotsEl.innerHTML='';
       counter.textContent='';
     } else if(currentCaseImages.length===1){
-      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
+      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" decoding="async" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
       dotsEl.innerHTML='';
       counter.textContent='';
     } else {
       // Build slides: first image eager, rest lazy
       var slidesHtml='';
       for(var j=0;j<currentCaseImages.length;j++){
-        var lazyAttr=' loading="lazy"';
+        var lazyAttr=(j===0) ? '' : ' loading="lazy"';
         slidesHtml+='<div class="slide">'+
           '<span class="img-loading">加载中...</span>'+
-          '<img src="'+currentCaseImages[j]+'" alt="" style="display:none"'+lazyAttr+
+          '<img src="'+currentCaseImages[j]+'" alt="" style="display:none" decoding="async"'+lazyAttr+
           ' onload="this.style.display=\'\';this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'" '+
           'onerror="this.parentElement.querySelector(\'.img-loading\').textContent=\'加载失败\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'">'+
         '</div>';
