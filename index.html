@@ -347,10 +347,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   function _showModal(){
     $id('modalOverlay').classList.add('active');
     document.body.style.overflow='hidden';
+    // Force all carousel images to re-check their load state
+    var imgs=$id('carouselSlides').querySelectorAll('img');
+    for(var k=0;k<imgs.length;k++){
+      if(!imgs[k].complete || imgs[k].naturalWidth===0){
+        var s=imgs[k].getAttribute('src');
+        imgs[k].removeAttribute('src');
+        imgs[k].offsetHeight; // force reflow
+        imgs[k].setAttribute('src',s);
+      }
+    }
   }
 
-  // Bug5 fix: preload first image via new Image() before showing modal,
-  // ensuring first slide is immediately visible.
+  // Preload ALL images via new Image() before showing modal.
+  // Timeout 3s prevents indefinite wait; images that fail are handled by onerror.
   function _openDetail(i){
     var c=filteredCases[i];
     currentCaseImages=(c.images||[]).slice().map(function(img){
@@ -368,16 +378,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       return;
     }
 
-    // Bug2 fix: preload first image via new Image() (no DOM pollution)
-    // Also preload next 2 images for smoother navigation
-    var preloadFirst = new Image();
-    preloadFirst.onload = function(){ _showModal(); };
-    preloadFirst.onerror = function(){ _showModal(); };
-    preloadFirst.src = currentCaseImages[0];
+    // Preload ALL images; show modal when all done or after 3s timeout
+    var loaded=0, total=currentCaseImages.length;
+    function oneDone(){
+      loaded++;
+      if(loaded>=total){ clearTimeout(timer); _showModal(); }
+    }
+    var timer=setTimeout(function(){ _showModal(); }, 3000);
 
-    // Preload images 2-3 in background (non-blocking)
-    for(var p=1; p<Math.min(3, currentCaseImages.length); p++){
-      (new Image()).src = currentCaseImages[p];
+    for(var p=0;p<total;p++){
+      var img=new Image();
+      img.onload=oneDone;
+      img.onerror=oneDone;
+      img.src=currentCaseImages[p];
     }
   }
 
