@@ -45,9 +45,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 .carousel{position:relative;width:100%;height:420px;background:#1a1a1a;overflow:hidden}
 .carousel .slides{display:flex;transition:transform .4s ease;height:100%}
-.carousel .slides .slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative}
+.carousel .slides .slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;background-color:#1a1a1a}
 .carousel .slides .slide img{max-width:100%;max-height:100%;object-fit:contain}
-.carousel .slides .slide .img-loading{position:absolute;color:#888;font-size:14px}
 .carousel .nav-btn{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:18px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:5;transition:background .2s}
 .carousel .nav-btn:hover{background:rgba(255,255,255,.4)}
 .carousel .nav-btn.prev{left:12px}
@@ -139,12 +138,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
   function $id(s){return document.getElementById(s)}
 
-  function showErrorPlaceholder(img){
+  // Bug1 fix: expose showErrorPlaceholder to global scope so inline onerror can call it
+  window.showErrorPlaceholder = function(img){
     img.style.display='none';
     var ph=document.createElement('div');
     ph.className='img-error-placeholder';
     ph.innerHTML='<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1.5" fill="#bbb"/><path d="M21 15l-5-5L5 21" stroke-linejoin="round"/></svg><span>图片加载失败</span>';
     img.parentElement.appendChild(ph);
+  };
+
+  // Expose navigation functions on window so event handlers can call them
+  window.goToSlide = function(n){ currentSlide=n; _updateCarousel(); };
+  window.prevSlide = function(){
+    if(!currentCaseImages.length) return;
+    currentSlide=(currentSlide-1+currentCaseImages.length)%currentCaseImages.length;
+    _updateCarousel();
+  };
+  window.nextSlide = function(){
+    if(!currentCaseImages.length) return;
+    currentSlide=(currentSlide+1)%currentCaseImages.length;
+    _updateCarousel();
+  };
+
+  // Internal updateCarousel (not exposed)
+  function _updateCarousel(){
+    $id('carouselSlides').style.transform='translateX(-'+currentSlide*100+'%)';
+    var dots=$id('carouselDots').querySelectorAll('.dot');
+    dots.forEach(function(d,j){d.classList.toggle('active',j===currentSlide)});
+    if(currentCaseImages.length>1){
+      $id('slideCounter').textContent=(currentSlide+1)+' / '+currentCaseImages.length;
+      // Bug2/4 fix: use new Image() instead of <link rel=preload> — no DOM pollution
+      var nextIdx=(currentSlide+1)%currentCaseImages.length;
+      (new Image()).src=currentCaseImages[nextIdx];
+    }
   }
 
   function log(msg){
@@ -240,79 +266,62 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     });
     grid.innerHTML=html;
 
-    // Bind click events via delegation instead of inline onclick
     grid.querySelectorAll('.card').forEach(function(card){
       card.addEventListener('click', function(){
         var idx=parseInt(this.getAttribute('data-idx'));
         if(!isNaN(idx) && idx>=0 && idx<filteredCases.length){
-          openDetail(idx);
+          _openDetail(idx);
         }
       });
     });
   }
 
-  function openDetail(i){
-    var c=filteredCases[i];
-    // Clone images array and remap to images_web/ compressed WebP
-    currentCaseImages=(c.images||[]).slice().map(function(img){
-      return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.webp');
-    });
-    // Preload up to first 3 images via link preload for faster display
-    var preloadCnt=Math.min(3, currentCaseImages.length);
-    for(var p=0;p<preloadCnt;p++){
-      var preloadLink=document.createElement('link');
-      preloadLink.rel='preload';
-      preloadLink.as='image';
-      preloadLink.href=currentCaseImages[p];
-      preloadLink.setAttribute('data-preload','1');
-      document.head.appendChild(preloadLink);
-    }
-    currentSlide=0;
-
+  // Build slide DOM for a given set of images.
+  // Bug3 fix: img never uses display:none — .slide background-color provides loading state.
+  // Bug1 fix: only onerror is inline; onload is removed.
+  function _buildSlides(images){
     var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
 
-    if(!currentCaseImages.length){
+    if(!images.length){
       slides.innerHTML='<div class="slide"><div style="color:#999;font-size:16px">暂无图片</div></div>';
       dotsEl.innerHTML='';
       counter.textContent='';
-    } else if(currentCaseImages.length===1){
-      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
+      return;
+    }
+    if(images.length===1){
+      slides.innerHTML='<div class="slide"><img src="'+images[0]+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)"></div>';
       dotsEl.innerHTML='';
       counter.textContent='';
-    } else {
-      // Build slides: first 3 images eager, rest lazy
-      var slidesHtml='';
-      for(var j=0;j<currentCaseImages.length;j++){
-        var lazyAttr=(j<3) ? '' : ' loading="lazy"';
-        slidesHtml+='<div class="slide">'+
-          '<span class="img-loading">加载中...</span>'+
-          '<img src="'+currentCaseImages[j]+'" alt="" style="display:none" decoding="async"'+lazyAttr+
-          ' onload="this.style.display=\'\';this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'" '+
-          'onerror="showErrorPlaceholder(this);this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'">'+
-        '</div>';
-      }
-      slides.innerHTML=slidesHtml;
-
-      // Dots
-      var dotsHtml='';
-      for(var k=0;k<currentCaseImages.length;k++){
-        dotsHtml+='<span class="dot'+(k===0?' active':'')+'" data-slide="'+k+'"></span>';
-      }
-      dotsEl.innerHTML=dotsHtml;
-
-      // Bind dot clicks
-      dotsEl.querySelectorAll('.dot').forEach(function(dot){
-        dot.addEventListener('click', function(){
-          goToSlide(parseInt(this.getAttribute('data-slide')));
-        });
-      });
-
-      counter.textContent='1 / '+currentCaseImages.length;
+      return;
     }
+    // Multi-image: first 3 eager, rest lazy
+    var slidesHtml='';
+    for(var j=0;j<images.length;j++){
+      var lazyAttr=(j<3) ? '' : ' loading="lazy"';
+      slidesHtml+='<div class="slide">'+
+        '<img src="'+images[j]+'" alt="" decoding="async"'+lazyAttr+
+        ' onerror="showErrorPlaceholder(this)">'+
+      '</div>';
+    }
+    slides.innerHTML=slidesHtml;
 
-    updateCarousel();
+    var dotsHtml='';
+    for(var k=0;k<images.length;k++){
+      dotsHtml+='<span class="dot'+(k===0?' active':'')+'" data-slide="'+k+'"></span>';
+    }
+    dotsEl.innerHTML=dotsHtml;
 
-    // Detail info
+    dotsEl.querySelectorAll('.dot').forEach(function(dot){
+      dot.addEventListener('click', function(){
+        window.goToSlide(parseInt(this.getAttribute('data-slide')));
+      });
+    });
+
+    counter.textContent='1 / '+images.length;
+  }
+
+  // Render detail info section
+  function _renderDetail(c){
     var products=(c.products||'').split(/[，,]/).map(function(p){return p.trim()}).filter(Boolean);
     var productTags=(c.product_category||[]).map(function(pc){
       return '<span class="m4">'+pc+'</span>';
@@ -332,44 +341,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
         (c.description?'<h4>案例描述</h4><p>'+c.description+'</p>':'')+
       '</div>'+
       '<div class="source">来源: '+(c.source_ppt||'未知')+'</div>';
+  }
 
+  // Show modal overlay (called after preload completes)
+  function _showModal(){
     $id('modalOverlay').classList.add('active');
     document.body.style.overflow='hidden';
   }
 
-  function goToSlide(n){
-    currentSlide=n;
-    updateCarousel();
-  }
+  // Bug5 fix: preload first image via new Image() before showing modal,
+  // ensuring first slide is immediately visible.
+  function _openDetail(i){
+    var c=filteredCases[i];
+    currentCaseImages=(c.images||[]).slice().map(function(img){
+      return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.webp');
+    });
+    currentSlide=0;
 
-  function prevSlide(){
-    if(!currentCaseImages.length) return;
-    currentSlide=(currentSlide-1+currentCaseImages.length)%currentCaseImages.length;
-    updateCarousel();
-  }
+    // Build slides and detail immediately
+    _buildSlides(currentCaseImages);
+    _renderDetail(c);
+    _updateCarousel();
 
-  function nextSlide(){
-    if(!currentCaseImages.length) return;
-    currentSlide=(currentSlide+1)%currentCaseImages.length;
-    updateCarousel();
-  }
+    if(currentCaseImages.length===0){
+      _showModal();
+      return;
+    }
 
-  function updateCarousel(){
-    $id('carouselSlides').style.transform='translateX(-'+currentSlide*100+'%)';
-    var dots=$id('carouselDots').querySelectorAll('.dot');
-    dots.forEach(function(d,j){d.classList.toggle('active',j===currentSlide)});
-    if(currentCaseImages.length>1){
-      $id('slideCounter').textContent=(currentSlide+1)+' / '+currentCaseImages.length;
-      // Preload next image
-      var nextIdx=(currentSlide+1)%currentCaseImages.length;
-      var preloadLink=document.createElement('link');
-      preloadLink.rel='preload';
-      preloadLink.as='image';
-      preloadLink.href=currentCaseImages[nextIdx];
-      preloadLink.setAttribute('data-carousel-preload','1');
-      document.head.appendChild(preloadLink);
+    // Bug2 fix: preload first image via new Image() (no DOM pollution)
+    // Also preload next 2 images for smoother navigation
+    var preloadFirst = new Image();
+    preloadFirst.onload = function(){ _showModal(); };
+    preloadFirst.onerror = function(){ _showModal(); };
+    preloadFirst.src = currentCaseImages[0];
+
+    // Preload images 2-3 in background (non-blocking)
+    for(var p=1; p<Math.min(3, currentCaseImages.length); p++){
+      (new Image()).src = currentCaseImages[p];
     }
   }
+
+  // Expose openDetail for external calls
+  window.openDetail = _openDetail;
 
   function closeModal(){
     $id('modalOverlay').classList.remove('active');
@@ -379,13 +392,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   // Event bindings
   $id('closeModal').addEventListener('click',closeModal);
   $id('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal()});
-  $id('prevBtn').addEventListener('click',prevSlide);
-  $id('nextBtn').addEventListener('click',nextSlide);
+  $id('prevBtn').addEventListener('click',window.prevSlide);
+  $id('nextBtn').addEventListener('click',window.nextSlide);
   document.addEventListener('keydown',function(e){
     if(!$id('modalOverlay').classList.contains('active')) return;
     if(e.key==='Escape') closeModal();
-    if(e.key==='ArrowLeft') prevSlide();
-    if(e.key==='ArrowRight') nextSlide();
+    if(e.key==='ArrowLeft') window.prevSlide();
+    if(e.key==='ArrowRight') window.nextSlide();
   });
 
   // Touch swipe
@@ -393,7 +406,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   $id('carousel').addEventListener('touchstart',function(e){touchX=e.touches[0].clientX});
   $id('carousel').addEventListener('touchend',function(e){
     var diff=touchX-e.changedTouches[0].clientX;
-    if(Math.abs(diff)>50) diff>0 ? nextSlide() : prevSlide();
+    if(Math.abs(diff)>50) diff>0 ? window.nextSlide() : window.prevSlide();
   });
 
   // Filter change listeners
