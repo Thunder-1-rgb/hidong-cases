@@ -242,10 +242,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
   function openDetail(i){
     var c=filteredCases[i];
-    // Clone images array and remap to images_web/ compressed JPEG
+    // Clone images array and remap to images_web/ compressed WebP
     currentCaseImages=(c.images||[]).slice().map(function(img){
-      return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.jpeg');
+      return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.webp');
     });
+    // Preload first image via link preload for faster display
+    if(currentCaseImages.length>0){
+      var preloadLink=document.createElement('link');
+      preloadLink.rel='preload';
+      preloadLink.as='image';
+      preloadLink.href=currentCaseImages[0];
+      preloadLink.setAttribute('data-preload','1');
+      document.head.appendChild(preloadLink);
+    }
     currentSlide=0;
 
     var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
