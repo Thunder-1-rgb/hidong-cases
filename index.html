@@ -57,6 +57,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 .carousel .dots .dot.active{background:#fff;transform:scale(1.2)}
 .carousel .slide-counter{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.5);color:#fff;font-size:12px;padding:4px 10px;border-radius:10px}
 
+.img-error-placeholder{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f0f0f0;color:#999;font-size:13px;gap:8px}
+.img-error-placeholder svg{opacity:.4}
+
 .modal-detail{padding:20px 24px}
 .modal-detail h2{font-size:19px;margin-bottom:12px}
 .modal-detail .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
@@ -135,6 +138,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[];
 
   function $id(s){return document.getElementById(s)}
+
+  function showErrorPlaceholder(img){
+    img.style.display='none';
+    var ph=document.createElement('div');
+    ph.className='img-error-placeholder';
+    ph.innerHTML='<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" stroke-linejoin="round"/><circle cx="8.5" cy="8.5" r="1.5" fill="#bbb"/><path d="M21 15l-5-5L5 21" stroke-linejoin="round"/></svg><span>图片加载失败</span>';
+    img.parentElement.appendChild(ph);
+  }
 
   function log(msg){
     var d=$id('dbgMsg');
@@ -246,12 +257,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     currentCaseImages=(c.images||[]).slice().map(function(img){
       return 'images_web/' + img.replace(/\.(jpg|jpeg|png|gif|bmp)$/i, '.webp');
     });
-    // Preload first image via link preload for faster display
-    if(currentCaseImages.length>0){
+    // Preload up to first 3 images via link preload for faster display
+    var preloadCnt=Math.min(3, currentCaseImages.length);
+    for(var p=0;p<preloadCnt;p++){
       var preloadLink=document.createElement('link');
       preloadLink.rel='preload';
       preloadLink.as='image';
-      preloadLink.href=currentCaseImages[0];
+      preloadLink.href=currentCaseImages[p];
       preloadLink.setAttribute('data-preload','1');
       document.head.appendChild(preloadLink);
     }
@@ -264,19 +276,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       dotsEl.innerHTML='';
       counter.textContent='';
     } else if(currentCaseImages.length===1){
-      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" decoding="async" onerror="this.style.display=\'none\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
+      slides.innerHTML='<div class="slide"><img src="'+currentCaseImages[0]+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)"><span class="img-loading" style="display:none;color:#999">图片加载失败</span></div>';
       dotsEl.innerHTML='';
       counter.textContent='';
     } else {
-      // Build slides: first image eager, rest lazy
+      // Build slides: first 3 images eager, rest lazy
       var slidesHtml='';
       for(var j=0;j<currentCaseImages.length;j++){
-        var lazyAttr=(j===0) ? '' : ' loading="lazy"';
+        var lazyAttr=(j<3) ? '' : ' loading="lazy"';
         slidesHtml+='<div class="slide">'+
           '<span class="img-loading">加载中...</span>'+
           '<img src="'+currentCaseImages[j]+'" alt="" style="display:none" decoding="async"'+lazyAttr+
           ' onload="this.style.display=\'\';this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'" '+
-          'onerror="this.parentElement.querySelector(\'.img-loading\').textContent=\'加载失败\';this.parentElement.querySelector(\'.img-loading\').style.display=\'block\'">'+
+          'onerror="showErrorPlaceholder(this);this.parentElement.querySelector(\'.img-loading\').style.display=\'none\'">'+
         '</div>';
       }
       slides.innerHTML=slidesHtml;
@@ -348,6 +360,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     dots.forEach(function(d,j){d.classList.toggle('active',j===currentSlide)});
     if(currentCaseImages.length>1){
       $id('slideCounter').textContent=(currentSlide+1)+' / '+currentCaseImages.length;
+      // Preload next image
+      var nextIdx=(currentSlide+1)%currentCaseImages.length;
+      var preloadLink=document.createElement('link');
+      preloadLink.rel='preload';
+      preloadLink.as='image';
+      preloadLink.href=currentCaseImages[nextIdx];
+      preloadLink.setAttribute('data-carousel-preload','1');
+      document.head.appendChild(preloadLink);
     }
   }
 
