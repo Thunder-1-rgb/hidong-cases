@@ -3507,7 +3507,11 @@
       "region": "山西省",
       "products": "天韵音频扩声、电源时序器",
       "description": "天韵音频扩声、电源时序器等",
-      "images": [],
+      "images": [
+        "会议室/会议室_004_01.jpg",
+        "会议室/会议室_004_02.jpg",
+        "会议室/会议室_004_03.jpg"
+      ],
       "source_ppt": "北京嗨动视觉案例集锦PPT版 -会议室0708.pptx",
       "product_category": [
         "音频扩声"
