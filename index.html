@@ -87,6 +87,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   .modal{width:96%}
   .header h1{font-size:16px}
 }
+.carousel-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1a1a;z-index:6;transition:opacity .3s}
+.carousel-loading.hidden{opacity:0;pointer-events:none}
+.spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.slide.fade-in img{animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -150,26 +156,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   // Expose navigation functions on window so event handlers can call them
   window.goToSlide = function(n){ currentSlide=n; _updateCarousel(); };
   window.prevSlide = function(){
-    if(!currentCaseImages.length) return;
-    currentSlide=(currentSlide-1+currentCaseImages.length)%currentCaseImages.length;
+    var totalSlides=$id('carouselSlides').children.length||0;
+    if(!totalSlides) return;
+    currentSlide=(currentSlide-1+totalSlides)%totalSlides;
     _updateCarousel();
   };
   window.nextSlide = function(){
-    if(!currentCaseImages.length) return;
-    currentSlide=(currentSlide+1)%currentCaseImages.length;
+    var totalSlides=$id('carouselSlides').children.length||0;
+    if(!totalSlides) return;
+    currentSlide=(currentSlide+1)%totalSlides;
     _updateCarousel();
   };
 
   // Internal updateCarousel (not exposed)
   function _updateCarousel(){
-    $id('carouselSlides').style.transform='translateX(-'+currentSlide*100+'%)';
+    var totalSlides=$id('carouselSlides').children.length||1;
+    $id('carouselSlides').style.transform='translateX(-'+(currentSlide*100/totalSlides)+'%)';
     var dots=$id('carouselDots').querySelectorAll('.dot');
     dots.forEach(function(d,j){d.classList.toggle('active',j===currentSlide)});
-    if(currentCaseImages.length>1){
-      $id('slideCounter').textContent=(currentSlide+1)+' / '+currentCaseImages.length;
-      // Bug2/4 fix: use new Image() instead of <link rel=preload> — no DOM pollution
-      var nextIdx=(currentSlide+1)%currentCaseImages.length;
-      (new Image()).src=currentCaseImages[nextIdx];
+    if(totalSlides>1){
+      $id('slideCounter').textContent=(currentSlide+1)+' / '+totalSlides;
+      var nextIdx=(currentSlide+1)%totalSlides;
+      var nextImg=$id('carouselSlides').children[nextIdx]?.querySelector('img');
+      if(nextImg && !nextImg.complete){
+        (new Image()).src=nextImg.src;
+      }
     }
   }
 
@@ -276,48 +287,69 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     });
   }
 
-  // Build slide DOM for a given set of images.
-  // Bug3 fix: img never uses display:none — .slide background-color provides loading state.
-  // Bug1 fix: only onerror is inline; onload is removed.
-  function _buildSlides(images){
+  // === Carousel loading spinner ===
+  function _showCarouselLoading(){
+    var carousel=$id('carousel');
+    var el=carousel.querySelector('.carousel-loading');
+    if(!el){
+      el=document.createElement('div');
+      el.className='carousel-loading';
+      el.innerHTML='<div class="spinner"></div>';
+      carousel.appendChild(el);
+    }
+    el.classList.remove('hidden');
+  }
+
+  function _hideCarouselLoading(){
+    var el=$id('carousel').querySelector('.carousel-loading');
+    if(el) el.classList.add('hidden');
+  }
+
+  // Build initial slide with first image only
+  function _buildInitialSlide(firstSrc){
     var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
-
-    if(!images.length){
-      slides.innerHTML='<div class="slide"><div style="color:#999;font-size:16px">暂无图片</div></div>';
-      dotsEl.innerHTML='';
-      counter.textContent='';
-      return;
-    }
-    if(images.length===1){
-      slides.innerHTML='<div class="slide"><img src="'+images[0]+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)"></div>';
-      dotsEl.innerHTML='';
-      counter.textContent='';
-      return;
-    }
-    // Multi-image: first 3 eager, rest lazy
-    var slidesHtml='';
-    for(var j=0;j<images.length;j++){
-      var lazyAttr=(j<3) ? '' : ' loading="lazy"';
-      slidesHtml+='<div class="slide">'+
-        '<img src="'+images[j]+'" alt="" decoding="async"'+lazyAttr+
-        ' onerror="showErrorPlaceholder(this)">'+
-      '</div>';
-    }
-    slides.innerHTML=slidesHtml;
-
-    var dotsHtml='';
-    for(var k=0;k<images.length;k++){
-      dotsHtml+='<span class="dot'+(k===0?' active':'')+'" data-slide="'+k+'"></span>';
-    }
-    dotsEl.innerHTML=dotsHtml;
-
-    dotsEl.querySelectorAll('.dot').forEach(function(dot){
-      dot.addEventListener('click', function(){
-        window.goToSlide(parseInt(this.getAttribute('data-slide')));
+    slides.innerHTML='<div class="slide"><img src="'+firstSrc+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)"></div>';
+    if(currentCaseImages.length>1){
+      dotsEl.innerHTML='<span class="dot active" data-slide="0"></span>';
+      counter.textContent='1 / '+currentCaseImages.length;
+      dotsEl.querySelector('.dot').addEventListener('click',function(){
+        window.goToSlide(0);
       });
-    });
+    }else{
+      dotsEl.innerHTML='';
+      counter.textContent='';
+    }
+  }
 
-    counter.textContent='1 / '+images.length;
+  // Append a newly loaded slide (background loading with fade-in)
+  function _appendSlide(imgSrc){
+    var slides=$id('carouselSlides'), dotsEl=$id('carouselDots'), counter=$id('slideCounter');
+    var idx=slides.children.length;
+
+    var slide=document.createElement('div');
+    slide.className='slide fade-in';
+    slide.innerHTML='<img src="'+imgSrc+'" alt="" decoding="async" onerror="showErrorPlaceholder(this)">';
+    slides.appendChild(slide);
+
+    var dot=document.createElement('span');
+    dot.className='dot';
+    dot.setAttribute('data-slide',String(idx));
+    dot.addEventListener('click',function(){
+      window.goToSlide(parseInt(this.getAttribute('data-slide')));
+    });
+    dotsEl.appendChild(dot);
+
+    counter.textContent=(currentSlide+1)+' / '+(idx+1);
+  }
+
+  // Background preload remaining images, append each as it loads
+  function _preloadRemaining(images){
+    images.forEach(function(src){
+      var img=new Image();
+      img.onload=function(){ _appendSlide(src); };
+      img.onerror=function(){ _appendSlide(src); };
+      img.src=src;
+    });
   }
 
   // Render detail info section
@@ -343,24 +375,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       '<div class="source">来源: '+(c.source_ppt||'未知')+'</div>';
   }
 
-  // Show modal overlay (called after preload completes)
+  // Show modal overlay immediately (no preload blocking)
   function _showModal(){
     $id('modalOverlay').classList.add('active');
     document.body.style.overflow='hidden';
-    // Force all carousel images to re-check their load state
-    var imgs=$id('carouselSlides').querySelectorAll('img');
-    for(var k=0;k<imgs.length;k++){
-      if(!imgs[k].complete || imgs[k].naturalWidth===0){
-        var s=imgs[k].getAttribute('src');
-        imgs[k].removeAttribute('src');
-        imgs[k].offsetHeight; // force reflow
-        imgs[k].setAttribute('src',s);
-      }
-    }
   }
 
-  // Preload ALL images via new Image() before showing modal.
-  // Timeout 3s prevents indefinite wait; images that fail are handled by onerror.
+  // Open detail: show modal immediately, first image first, rest in background
   function _openDetail(i){
     var c=filteredCases[i];
     currentCaseImages=(c.images||[]).slice().map(function(img){
@@ -368,30 +389,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     });
     currentSlide=0;
 
-    // Build slides and detail immediately
-    _buildSlides(currentCaseImages);
+    // Show modal immediately — no blocking
+    _showModal();
     _renderDetail(c);
-    _updateCarousel();
 
     if(currentCaseImages.length===0){
-      _showModal();
+      $id('carouselSlides').innerHTML='<div class="slide"><div style="color:#999;font-size:16px">暂无图片</div></div>';
+      $id('carouselDots').innerHTML='';
+      $id('slideCounter').textContent='';
       return;
     }
 
-    // Preload ALL images; show modal when all done or after 3s timeout
-    var loaded=0, total=currentCaseImages.length;
-    function oneDone(){
-      loaded++;
-      if(loaded>=total){ clearTimeout(timer); _showModal(); }
-    }
-    var timer=setTimeout(function(){ _showModal(); }, 3000);
+    _showCarouselLoading();
 
-    for(var p=0;p<total;p++){
-      var img=new Image();
-      img.onload=oneDone;
-      img.onerror=oneDone;
-      img.src=currentCaseImages[p];
+    var firstImg=new Image();
+    var firstDone=false;
+    function onFirstReady(){
+      if(firstDone) return;
+      firstDone=true;
+      _buildInitialSlide(currentCaseImages[0]);
+      _hideCarouselLoading();
+      _updateCarousel();
+      if(currentCaseImages.length>1){
+        _preloadRemaining(currentCaseImages.slice(1));
+      }
     }
+    firstImg.onload=onFirstReady;
+    firstImg.onerror=onFirstReady;
+    firstImg.src=currentCaseImages[0];
   }
 
   // Expose openDetail for external calls
