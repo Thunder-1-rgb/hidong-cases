@@ -37,8 +37,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 .card .info .tag.s2{background:#e8f5e9;color:#2e7d32}
 .card .info .tag.s3{background:#fff3e0;color:#e65100}
 
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:center}
-.modal-overlay.active{display:flex}
+.modal-overlay{display:flex;opacity:0;pointer-events:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:center}
+.modal-overlay.active{opacity:1;pointer-events:auto}
 .modal{background:#fff;border-radius:12px;width:92%;max-width:880px;max-height:92vh;overflow:auto;position:relative}
 .modal .close-btn{position:absolute;top:12px;right:16px;width:32px;height:32px;border:none;background:rgba(0,0,0,.3);color:#fff;border-radius:50%;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}
 .modal .close-btn:hover{background:rgba(0,0,0,.5)}
