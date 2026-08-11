@@ -106,7 +106,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 </style>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -330,6 +329,15 @@ function $id(s){return document.getElementById(s)}
       img.src=url;
     });
   }
+  function loadScript(url){
+    return new Promise(function(resolve, reject){
+      var s=document.createElement('script');
+      s.src=url;
+      s.onload=resolve;
+      s.onerror=function(){ reject(new Error('CDN脚本加载失败: '+url)); };
+      document.head.appendChild(s);
+    });
+  }
   async function exportPDF(){
     var btn=$id('btnExportPdf');
     btn.disabled=true;
@@ -337,6 +345,10 @@ function $id(s){return document.getElementById(s)}
     var selIdxs=Array.from(selectedCases).sort(function(a,b){return a-b});
     if(!selIdxs.length){ btn.disabled=false; btn.textContent='导出选中案例 PDF'; return; }
     try{
+      if(!window.jspdf){
+        btn.textContent='加载JS库...';
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      }
       var { jsPDF }=window.jspdf;
       var doc=new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
       var pageW=210, pageH=297, margin=15, contentW=pageW-2*margin;
@@ -603,8 +615,10 @@ function $id(s){return document.getElementById(s)}
     .catch(function(e){
       $id('loadingMsg').style.display='none';
       $id('errorMsg').style.display='block';
-      $id('errorMsg').textContent='数据加载失败: '+e.message+'，请按 Ctrl+F5 强制刷新页面重试';
-      log('加载失败: '+e.message);
+      var emsg=e.message||'未知错误';
+      if(emsg==='Failed to fetch') emsg='网络连接失败，请检查网络后刷新重试（可按 Ctrl+F5 强制刷新）';
+      $id('errorMsg').textContent='数据加载失败: '+emsg;
+      log('加载失败: '+emsg);
     });
 })();
 </script>
