@@ -593,12 +593,10 @@ function $id(s){return document.getElementById(s)}
     });
     applyFilters();
   });
-  // Robust data loading: script tag first, then fetch, then XHR
-  function initApp(data){
-    if(!data.cases||!Array.isArray(data.cases)){
-      throw new Error('数据格式错误：缺少 cases 数组');
-    }
-    allCases=data.cases;
+  // Simple loading: data preloaded via <script src="cases_data.js"> in head
+  $id('loadingMsg').style.display='block';
+  if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
+    allCases=window.__CASES_DATA__.cases;
     $id('loadingMsg').style.display='none';
     initFilters();
     filteredCases=allCases.slice();
@@ -607,65 +605,13 @@ function $id(s){return document.getElementById(s)}
     renderCards();
     updateStats();
     log('加载完成: '+allCases.length+' 条案例');
-  }
-  function onLoadError(emsg){
+  } else {
     $id('loadingMsg').style.display='none';
     $id('errorMsg').style.display='block';
-    $id('errorMsg').textContent='数据加载失败: '+emsg;
-    log('加载失败: '+emsg);
-  }
-  function loadViaFetch(){
-    return fetch('cases_data_enhanced.json?v='+Date.now()).then(function(r){
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return r.json();
-    });
-  }
-  function loadViaXHR(){
-    return new Promise(function(resolve, reject){
-      var xhr=new XMLHttpRequest();
-      xhr.open('GET', 'cases_data_enhanced.json?v='+Date.now());
-      xhr.onload=function(){ if(xhr.status===200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('XHR HTTP '+xhr.status)); };
-      xhr.onerror=function(){ reject(new Error('XHR 网络错误')); };
-      xhr.send();
-    });
+    $id('errorMsg').textContent='数据加载失败，请按 Ctrl+F5 强制刷新页面重试';
   }
 
-  $id('loadingMsg').style.display='block';
 
-  // Strategy: check if script-tag preload worked
-  if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
-    // Script tag loaded first (fast path)
-    initApp(window.__CASES_DATA__);
-  } else {
-    // Script tag not loaded yet, wait a moment then try fetch
-    var scriptReady=false;
-    window.__onCasesDataReady=function(){
-      if(scriptReady) return;
-      scriptReady=true;
-      if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
-        initApp(window.__CASES_DATA__);
-      }
-    };
-    // If cases_data.js loads after this script, it will call __onCasesDataReady
-    // Patch: add a handler for when the script loads
-    var checker=setInterval(function(){
-      if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
-        clearInterval(checker);
-        if(!scriptReady){ scriptReady=true; initApp(window.__CASES_DATA__); }
-      }
-    }, 100);
-    // Timeout: after 2s if script didn't load, try fetch then XHR
-    setTimeout(function(){
-      if(scriptReady) return;
-      clearInterval(checker);
-      loadViaFetch().then(initApp).catch(function(fe){
-        loadViaXHR().then(initApp).catch(function(xe){
-          onLoadError(xe.message||'所有加载方式均失败，请检查网络连接');
-        });
-      });
-    }, 2000);
-  }
-})();
 </script>
 </body>
 </html>
