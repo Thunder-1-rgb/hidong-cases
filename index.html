@@ -106,6 +106,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 </style>
 
+
+<script src="cases_data.js"></script>
 </head>
 <body>
 <div class="header">
@@ -591,35 +593,78 @@ function $id(s){return document.getElementById(s)}
     });
     applyFilters();
   });
-  // Load data with cache-busting
-  $id('loadingMsg').style.display='block';
-  fetch('cases_data_enhanced.json?v='+Date.now())
-    .then(function(r){
+  // Robust data loading: script tag first, then fetch, then XHR
+  function initApp(data){
+    if(!data.cases||!Array.isArray(data.cases)){
+      throw new Error('数据格式错误：缺少 cases 数组');
+    }
+    allCases=data.cases;
+    $id('loadingMsg').style.display='none';
+    initFilters();
+    filteredCases=allCases.slice();
+    selectedCases.clear();
+    updateSelCount();
+    renderCards();
+    updateStats();
+    log('加载完成: '+allCases.length+' 条案例');
+  }
+  function onLoadError(emsg){
+    $id('loadingMsg').style.display='none';
+    $id('errorMsg').style.display='block';
+    $id('errorMsg').textContent='数据加载失败: '+emsg;
+    log('加载失败: '+emsg);
+  }
+  function loadViaFetch(){
+    return fetch('cases_data_enhanced.json?v='+Date.now()).then(function(r){
       if(!r.ok) throw new Error('HTTP '+r.status);
       return r.json();
-    })
-    .then(function(data){
-      if(!data.cases||!Array.isArray(data.cases)){
-        throw new Error('数据格式错误：缺少 cases 数组');
-      }
-      allCases=data.cases;
-      $id('loadingMsg').style.display='none';
-      initFilters();
-      filteredCases=allCases.slice();
-      selectedCases.clear();
-      updateSelCount();
-      renderCards();
-      updateStats();
-      log('加载完成: '+allCases.length+' 条案例');
-    })
-    .catch(function(e){
-      $id('loadingMsg').style.display='none';
-      $id('errorMsg').style.display='block';
-      var emsg=e.message||'未知错误';
-      if(emsg==='Failed to fetch') emsg='网络连接失败，请检查网络后刷新重试（可按 Ctrl+F5 强制刷新）';
-      $id('errorMsg').textContent='数据加载失败: '+emsg;
-      log('加载失败: '+emsg);
     });
+  }
+  function loadViaXHR(){
+    return new Promise(function(resolve, reject){
+      var xhr=new XMLHttpRequest();
+      xhr.open('GET', 'cases_data_enhanced.json?v='+Date.now());
+      xhr.onload=function(){ if(xhr.status===200) resolve(JSON.parse(xhr.responseText)); else reject(new Error('XHR HTTP '+xhr.status)); };
+      xhr.onerror=function(){ reject(new Error('XHR 网络错误')); };
+      xhr.send();
+    });
+  }
+
+  $id('loadingMsg').style.display='block';
+
+  // Strategy: check if script-tag preload worked
+  if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
+    // Script tag loaded first (fast path)
+    initApp(window.__CASES_DATA__);
+  } else {
+    // Script tag not loaded yet, wait a moment then try fetch
+    var scriptReady=false;
+    window.__onCasesDataReady=function(){
+      if(scriptReady) return;
+      scriptReady=true;
+      if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
+        initApp(window.__CASES_DATA__);
+      }
+    };
+    // If cases_data.js loads after this script, it will call __onCasesDataReady
+    // Patch: add a handler for when the script loads
+    var checker=setInterval(function(){
+      if(window.__CASES_DATA__ && window.__CASES_DATA__.cases){
+        clearInterval(checker);
+        if(!scriptReady){ scriptReady=true; initApp(window.__CASES_DATA__); }
+      }
+    }, 100);
+    // Timeout: after 2s if script didn't load, try fetch then XHR
+    setTimeout(function(){
+      if(scriptReady) return;
+      clearInterval(checker);
+      loadViaFetch().then(initApp).catch(function(fe){
+        loadViaXHR().then(initApp).catch(function(xe){
+          onLoadError(xe.message||'所有加载方式均失败，请检查网络连接');
+        });
+      });
+    }, 2000);
+  }
 })();
 </script>
 </body>
