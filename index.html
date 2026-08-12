@@ -457,114 +457,146 @@ var CASES_DATA = {"cases":[{"id":"BR_001","name":"广东佛山张槎商会可视
   $id('btnDeselectAll').addEventListener('click',function(){
     selectedIds.clear(); renderCards(); updateSelectionUI();
   });
-  // PDF export with dynamic jsPDF loading
+  // PDF export with dynamic html2canvas + jsPDF loading
   var _pdfLoading=false;
   $id('btnExportPDF').addEventListener('click',function(){
     var cases=_getSelectedCases();
     if(!cases.length) return;
-    if(window.jspdf){ _doExportPDF(cases); return; }
     if(_pdfLoading) return;
     _pdfLoading=true;
     $id('btnExportPDF').disabled=true;
     $id('btnExportPDF').textContent='加载中...';
-    var urls=[
-      'https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js',
-      'https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-    ];
-    function tryLoad(idx){
-      if(idx>=urls.length){
-        _pdfLoading=false;
-        $id('btnExportPDF').textContent='导出选中案例 PDF';
-        $id('btnExportPDF').disabled=false;
-        log('jsPDF 加载失败，请检查网络连接');
-        alert('jsPDF 加载失败，请检查网络连接后重试');
-        return;
-      }
+
+    // Step 1: load html2canvas from bootcdn
+    function loadH2C(cb){
+      if(window.html2canvas){ cb(); return; }
       var s=document.createElement('script');
-      s.src=urls[idx];
-      var timer=setTimeout(function(){
-        s.onload=null; s.onerror=null;
-        if(s.parentNode) s.parentNode.removeChild(s);
-        log('jsPDF CDN'+idx+' 超时，尝试备用源');
-        tryLoad(idx+1);
-      }, 10000);
-      s.onload=function(){
-        clearTimeout(timer);
+      s.src='https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      var t=setTimeout(function(){ s.onload=null; s.onerror=null; if(s.parentNode)s.parentNode.removeChild(s); cb('html2canvas 超时'); }, 10000);
+      s.onload=function(){ clearTimeout(t); cb(); };
+      s.onerror=function(){ clearTimeout(t); if(s.parentNode)s.parentNode.removeChild(s); cb('html2canvas 加载失败'); };
+      document.head.appendChild(s);
+    }
+    // Step 2: load jsPDF (unpkg → bootcdn fallback)
+    function loadJSPDF(cb){
+      if(window.jspdf){ cb(); return; }
+      var urls=[
+        'https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js',
+        'https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+      ];
+      function tryLoad(idx){
+        if(idx>=urls.length){ cb('jsPDF 加载失败'); return; }
+        var s=document.createElement('script');
+        s.src=urls[idx];
+        var t=setTimeout(function(){ s.onload=null; s.onerror=null; if(s.parentNode)s.parentNode.removeChild(s); log('jsPDF CDN'+idx+' 超时'); tryLoad(idx+1); }, 10000);
+        s.onload=function(){ clearTimeout(t); cb(); };
+        s.onerror=function(){ clearTimeout(t); if(s.parentNode)s.parentNode.removeChild(s); log('jsPDF CDN'+idx+' 失败'); tryLoad(idx+1); };
+        document.head.appendChild(s);
+      }
+      tryLoad(0);
+    }
+    function fail(msg){
+      _pdfLoading=false;
+      $id('btnExportPDF').textContent='导出选中案例 PDF';
+      $id('btnExportPDF').disabled=false;
+      log(msg); alert(msg+'，请检查网络连接后重试');
+    }
+    loadH2C(function(err1){
+      if(err1){ fail(err1); return; }
+      loadJSPDF(function(err2){
+        if(err2){ fail(err2); return; }
         _pdfLoading=false;
         $id('btnExportPDF').textContent='导出选中案例 PDF';
         $id('btnExportPDF').disabled=false;
         _doExportPDF(cases);
-      };
-      s.onerror=function(){
-        clearTimeout(timer);
-        if(s.parentNode) s.parentNode.removeChild(s);
-        log('jsPDF CDN'+idx+' 加载失败，尝试备用源');
-        tryLoad(idx+1);
-      };
-      document.head.appendChild(s);
-    }
-    tryLoad(0);
+      });
+    });
   });
-  function _imgToDataURL(url, callback){
-    var img=new Image();
-    img.crossOrigin='anonymous';
-    img.onload=function(){
-      var c=document.createElement('canvas');
-      c.width=this.naturalWidth; c.height=this.naturalHeight;
-      c.getContext('2d').drawImage(this,0,0);
-      callback(c.toDataURL('image/jpeg',0.8));
-    };
-    img.onerror=function(){ callback(null); };
-    img.src=url;
-  }
   function _doExportPDF(cases){
     var doc=new window.jspdf.jsPDF('p','mm','a4');
-    var pw=210, ph=297, m=15, cw=pw-2*m, y;
-    var total=cases.length, done=0;
-    function addCase(idx){
+    var pw=210, ph=297, m=12, cw=pw-2*m;
+    var total=cases.length;
+
+    // Build filename: 案例导出_{筛选条件}_{YYYYMMDD-HHmmss}.pdf
+    var filters=[];
+    var fi=$id('filterIndustry').value, fs=$id('filterScenario').value;
+    var fr=$id('filterRegion').value, fp=$id('filterProduct').value;
+    if(fi) filters.push(fi); if(fs) filters.push(fs);
+    if(fr) filters.push(fr); if(fp) filters.push(fp);
+    var filterStr=filters.length?filters.join('-').replace(/[/\\:*?"<>|]/g,'_'):'全部';
+    var now=new Date();
+    var ds=now.getFullYear()+
+      String(now.getMonth()+1).padStart(2,'0')+
+      String(now.getDate()).padStart(2,'0')+'-'+
+      String(now.getHours()).padStart(2,'0')+
+      String(now.getMinutes()).padStart(2,'0')+
+      String(now.getSeconds()).padStart(2,'0');
+
+    // Hidden container for html2canvas rendering
+    var container=document.createElement('div');
+    container.style.cssText='position:absolute;left:-9999px;top:0;width:794px;';
+    document.body.appendChild(container);
+    $id('btnExportPDF').disabled=true;
+
+    function addPage(idx){
       if(idx>=total){
-        var now=new Date();
-        var ds=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-        doc.save('案例导出_'+ds+'.pdf'); return;
+        document.body.removeChild(container);
+        doc.save('案例导出_'+filterStr+'_'+ds+'.pdf');
+        $id('btnExportPDF').disabled=false;
+        log('PDF导出完成: '+total+' 页');
+        return;
       }
       if(idx>0) doc.addPage();
       var c=cases[idx];
-      y=m;
-      doc.setFontSize(16); doc.setTextColor(26,35,126);
-      var lines=doc.splitTextToSize(c.name||'未命名',cw);
-      doc.text(lines,m,y); y+=lines.length*7+4;
-      doc.setFontSize(11); doc.setTextColor(100,100,100);
+      var products=(c.products||'').split(/[，,]/).map(function(p){return p.trim()}).filter(Boolean);
       var meta=[(c.industry||''),(c.scenario||''),(c.region||'')].filter(Boolean).join(' | ');
-      doc.text(meta,m,y); y+=7;
-      if(c.product_category&&c.product_category.length){
-        doc.setTextColor(123,31,162);
-        doc.text('涉及产品: '+c.product_category.join('、'),m,y); y+=7;
-      }
-      if(c.description){
-        doc.setTextColor(80,80,80); doc.setFontSize(10);
-        var descLines=doc.splitTextToSize(c.description,cw);
-        doc.text(descLines,m,y); y+=descLines.length*4.5+4;
-      }
+      var prodTags=(c.product_category||[]).map(function(p){
+        return '<span style="display:inline-block;background:#e3f2fd;color:#1565c0;font-size:11px;padding:2px 8px;border-radius:3px;margin:2px;">'+p+'</span>';
+      }).join('');
+      var imgHtml='';
       if(c.images&&c.images.length){
-        var imgPath='images_web/'+c.images[0].replace(/\.(jpg|jpeg|png|gif|bmp)$/i,'.webp');
-        _imgToDataURL(imgPath,function(dataUrl){
-          if(dataUrl){
-            try{
-              var ih=Math.min(90,cw*0.75);
-              doc.addImage(dataUrl,'JPEG',m,y,cw,ih);
-            }catch(e){ doc.setFontSize(9); doc.setTextColor(200,0,0); doc.text('[图片加载失败]',m,y); }
-          }
-          done++; addCase(idx+1);
+        imgHtml='<div style="margin:10px 0;text-align:center;">'+
+          '<img src="images_web/'+c.images[0].replace(/\.(jpg|jpeg|png|gif|bmp)$/i,'.webp')+
+          '" style="max-width:100%;max-height:260px;border-radius:4px;" crossorigin="anonymous" onerror="this.style.display=\'none\'"></div>';
+      }
+      var html=
+        '<div style="width:770px;min-height:1100px;padding:24px 30px 40px;font-family:\'Microsoft YaHei\',\'PingFang SC\',sans-serif;background:#fff;box-sizing:border-box;position:relative;">'+
+          '<h1 style="font-size:20px;color:#1a237e;margin:0 0 10px 0;line-height:1.4;word-break:break-all;">'+(c.name||'未命名')+'</h1>'+
+          '<p style="font-size:13px;color:#666;margin:0 0 8px 0;">'+meta+'</p>'+
+          (prodTags?'<div style="margin-bottom:8px;">'+prodTags+'</div>':'')+
+          '<div style="margin-bottom:10px;">'+
+            '<span style="font-size:12px;color:#999;">使用产品</span>'+
+            '<div style="font-size:12px;color:#555;margin-top:2px;">'+products.map(function(p){
+              return '<span style="display:inline-block;background:#f5f5f5;padding:2px 8px;border-radius:10px;margin:1px 3px 1px 0;">'+p+'</span>';
+            }).join('')+'</div>'+
+          '</div>'+
+          (c.description?'<div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;">案例描述</span><p style="font-size:12px;color:#333;line-height:1.8;margin:4px 0 0 0;">'+c.description+'</p></div>':'')+
+          imgHtml+
+          (c.source_ppt?'<div style="margin-top:8px;font-size:11px;color:#bbb;border-top:1px solid #eee;padding-top:6px;">来源: '+c.source_ppt+'</div>':'')+
+          '<div style="position:absolute;bottom:16px;right:30px;font-size:11px;color:#999;">第 '+(idx+1)+'/'+total+' 页</div>'+
+        '</div>';
+
+      container.innerHTML=html;
+      var pageEl=container.firstChild;
+
+      html2canvas(pageEl,{scale:2,useCORS:true,allowTaint:true,backgroundColor:'#ffffff',logging:false})
+        .then(function(canvas){
+          var imgData=canvas.toDataURL('image/jpeg',0.85);
+          var imgW=cw;
+          var imgH=(canvas.height/canvas.width)*imgW;
+          // Fit to page height
+          var maxH=ph-2*m;
+          if(imgH>maxH){ imgW=maxH*(canvas.width/canvas.height); imgH=maxH; }
+          doc.addImage(imgData,'JPEG',m+(cw-imgW)/2,m,imgW,imgH);
+          addPage(idx+1);
+        })
+        .catch(function(e){
+          doc.setFontSize(9); doc.setTextColor(200,0,0);
+          doc.text('[渲染失败: '+e.message+']',m,30);
+          addPage(idx+1);
         });
-        return;
-      }
-      if(c.source_ppt){
-        y+=4; doc.setFontSize(9); doc.setTextColor(150,150,150);
-        doc.text('来源: '+(c.source_ppt||''),m,y);
-      }
-      done++; addCase(idx+1);
     }
-    addCase(0);
+    addPage(0);
   }
   // Load data with cache-busting
   $id('loadingMsg').style.display='block';
