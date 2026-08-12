@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -74,6 +74,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 .empty{text-align:center;padding:60px 20px;color:#999;font-size:15px}
 .loading{text-align:center;padding:60px;color:#999;font-size:15px}
 .error{text-align:center;padding:40px;color:#e53935;font-size:14px}
+.toolbar{display:flex;gap:8px;padding:8px 24px;align-items:center;flex-wrap:wrap}
+.toolbar .tb-btn{padding:6px 14px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;background:#fff;cursor:pointer;color:#666}
+.toolbar .tb-btn:hover{color:#1565c0;border-color:#1565c0}
+.toolbar .tb-btn.primary{background:#1565c0;color:#fff;border-color:#1565c0}
+.toolbar .tb-btn.primary:hover{background:#0d47a1}
+.toolbar .tb-btn:disabled{opacity:.5;cursor:not-allowed}
+.card .cb-wrap{position:absolute;top:8px;left:8px;z-index:10;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);border-radius:4px;cursor:pointer;border:2px solid #d9d9d9;transition:all .2s}
+.card .cb-wrap input[type=checkbox]{width:14px;height:14px;cursor:pointer;margin:0}
+.card.selected{border:2px solid #1565c0;box-shadow:0 0 0 2px rgba(21,101,192,.2)}
+.card.selected .cb-wrap{background:#1565c0;border-color:#1565c0}
 @media(max-width:640px){
   .filter-bar{padding:8px 12px;gap:5px}
   .filter-bar select{min-width:80px;font-size:12px;padding:5px 22px 5px 8px}
@@ -83,6 +93,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   .carousel{height:220px}
   .modal{width:96%}
   .header h1{font-size:16px}
+  .toolbar{padding:6px 12px;gap:5px}
+  .toolbar .tb-btn{font-size:12px;padding:5px 10px}
 }
 </style>
 </head>
@@ -103,6 +115,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   <button class="btn-reset" id="btnReset">重置</button>
   <span class="count-badge" id="countBadge"></span>
   <span class="dbg" id="dbgMsg"></span>
+</div>
+<div class="toolbar" id="toolbar" style="display:none">
+  <button class="tb-btn" id="btnSelectAll">全选筛选结果</button>
+  <button class="tb-btn" id="btnDeselectAll">取消全选</button>
+  <button class="tb-btn primary" id="btnExportPDF" disabled>导出选中案例 PDF</button>
+  <span id="selectCount" style="font-size:13px;color:#666;margin-left:8px"></span>
 </div>
 <div class="main">
   <div class="loading" id="loadingMsg">正在加载案例数据...</div>
@@ -126,7 +144,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 <script>
 (function(){
   "use strict";
-  var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[];
+  var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[], selectedIds=new Set();
   function $id(s){return document.getElementById(s)}
   // Bug1 fix: expose showErrorPlaceholder to global scope so inline onerror can call it
   window.showErrorPlaceholder = function(img){
@@ -193,6 +211,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       return true;
     });
     log('筛选完成: '+filteredCases.length+' 条');
+    selectedIds.clear(); updateSelectionUI();
     renderCards();
     updateStats();
   }
@@ -233,7 +252,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     filteredCases.forEach(function(c,i){
       var img=(c.images&&c.images.length) ? ('thumbnails/'+c.images[0].replace(/\.(png|gif|jpg|jpeg|bmp)$/i,'.webp')) : '';
       var cnt=c.images ? c.images.length : 0;
-      html+='<div class="card" data-idx="'+i+'"><div class="img-wrap">'+
+      var isSel=selectedIds.has(c.id);
+      html+='<div class="card'+(isSel?' selected':'')+'" data-idx="'+i+'" data-id="'+c.id+'"><div class="img-wrap">'+
+        '<div class="cb-wrap"><input type="checkbox"'+(isSel?' checked':'')+'></div>'+
         '<img src="'+img+'" alt="" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML=\'<div style=width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:14px>暂无图片</div>\'">'+
         (cnt>1?'<span class="img-count">'+cnt+'张</span>':'')+'</div><div class="info"><h3>'+
         (c.name||'未命名')+'</h3><div class="tags"><span class="tag">'+(c.industry||'未知')+
@@ -242,13 +263,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     });
     grid.innerHTML=html;
     grid.querySelectorAll('.card').forEach(function(card){
-      card.addEventListener('click', function(){
+      card.addEventListener('click', function(e){
+        if(e.target.closest('.cb-wrap')){
+          e.stopPropagation();
+          var cb=this.querySelector('.cb-wrap input[type=checkbox]');
+          cb.checked=!cb.checked;
+          _toggleSelect(this, cb.checked);
+          return;
+        }
         var idx=parseInt(this.getAttribute('data-idx'));
         if(!isNaN(idx) && idx>=0 && idx<filteredCases.length){
           _openDetail(idx);
         }
       });
     });
+  }
+  function _toggleSelect(cardEl, checked){
+    var id=cardEl.getAttribute('data-id');
+    if(checked){ selectedIds.add(id); cardEl.classList.add('selected'); }
+    else { selectedIds.delete(id); cardEl.classList.remove('selected'); }
+    updateSelectionUI();
+  }
+  function updateSelectionUI(){
+    var n=selectedIds.size;
+    $id('selectCount').textContent=n>0?'已选 '+n+' 个案例':'';
+    $id('btnExportPDF').disabled=n===0;
+  }
+  function _getSelectedCases(){
+    var map={};
+    allCases.forEach(function(c){ map[c.id]=c; });
+    var result=[];
+    selectedIds.forEach(function(id){ if(map[id]) result.push(map[id]); });
+    return result;
   }
   // Build slide DOM for a given set of images.
   // Bug3 fix: img never uses display:none — .slide background-color provides loading state.
@@ -398,6 +444,97 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
     });
     applyFilters();
   });
+  // Toolbar: select all / deselect all
+  $id('btnSelectAll').addEventListener('click',function(){
+    filteredCases.forEach(function(c){ selectedIds.add(c.id); });
+    renderCards(); updateSelectionUI();
+  });
+  $id('btnDeselectAll').addEventListener('click',function(){
+    selectedIds.clear(); renderCards(); updateSelectionUI();
+  });
+  // PDF export with dynamic jsPDF loading
+  $id('btnExportPDF').addEventListener('click',function(){
+    var cases=_getSelectedCases();
+    if(!cases.length) return;
+    if(window.jspdf){ _doExportPDF(cases); return; }
+    $id('btnExportPDF').disabled=true;
+    $id('btnExportPDF').textContent='加载中...';
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+    s.onload=function(){
+      $id('btnExportPDF').textContent='导出选中案例 PDF';
+      $id('btnExportPDF').disabled=false;
+      _doExportPDF(cases);
+    };
+    s.onerror=function(){
+      $id('btnExportPDF').textContent='导出选中案例 PDF';
+      $id('btnExportPDF').disabled=false;
+      log('jsPDF 加载失败，请检查网络连接');
+      alert('jsPDF 加载失败，请刷新页面后重试');
+    };
+    document.head.appendChild(s);
+  });
+  function _imgToDataURL(url, callback){
+    var img=new Image();
+    img.crossOrigin='anonymous';
+    img.onload=function(){
+      var c=document.createElement('canvas');
+      c.width=this.naturalWidth; c.height=this.naturalHeight;
+      c.getContext('2d').drawImage(this,0,0);
+      callback(c.toDataURL('image/jpeg',0.8));
+    };
+    img.onerror=function(){ callback(null); };
+    img.src=url;
+  }
+  function _doExportPDF(cases){
+    var doc=new window.jspdf.jsPDF('p','mm','a4');
+    var pw=210, ph=297, m=15, cw=pw-2*m, y;
+    var total=cases.length, done=0;
+    function addCase(idx){
+      if(idx>=total){
+        var now=new Date();
+        var ds=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+        doc.save('案例导出_'+ds+'.pdf'); return;
+      }
+      if(idx>0) doc.addPage();
+      var c=cases[idx];
+      y=m;
+      doc.setFontSize(16); doc.setTextColor(26,35,126);
+      var lines=doc.splitTextToSize(c.name||'未命名',cw);
+      doc.text(lines,m,y); y+=lines.length*7+4;
+      doc.setFontSize(11); doc.setTextColor(100,100,100);
+      var meta=[(c.industry||''),(c.scenario||''),(c.region||'')].filter(Boolean).join(' | ');
+      doc.text(meta,m,y); y+=7;
+      if(c.product_category&&c.product_category.length){
+        doc.setTextColor(123,31,162);
+        doc.text('涉及产品: '+c.product_category.join('、'),m,y); y+=7;
+      }
+      if(c.description){
+        doc.setTextColor(80,80,80); doc.setFontSize(10);
+        var descLines=doc.splitTextToSize(c.description,cw);
+        doc.text(descLines,m,y); y+=descLines.length*4.5+4;
+      }
+      if(c.images&&c.images.length){
+        var imgPath='images_web/'+c.images[0].replace(/\.(jpg|jpeg|png|gif|bmp)$/i,'.webp');
+        _imgToDataURL(imgPath,function(dataUrl){
+          if(dataUrl){
+            try{
+              var ih=Math.min(90,cw*0.75);
+              doc.addImage(dataUrl,'JPEG',m,y,cw,ih);
+            }catch(e){ doc.setFontSize(9); doc.setTextColor(200,0,0); doc.text('[图片加载失败]',m,y); }
+          }
+          done++; addCase(idx+1);
+        });
+        return;
+      }
+      if(c.source_ppt){
+        y+=4; doc.setFontSize(9); doc.setTextColor(150,150,150);
+        doc.text('来源: '+(c.source_ppt||''),m,y);
+      }
+      done++; addCase(idx+1);
+    }
+    addCase(0);
+  }
   // Load data with cache-busting
   $id('loadingMsg').style.display='block';
   fetch('cases_data_enhanced.json?v='+Date.now())
@@ -411,6 +548,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
       }
       allCases=data.cases;
       $id('loadingMsg').style.display='none';
+      $id('toolbar').style.display='flex';
       initFilters();
       filteredCases=allCases.slice();
       renderCards();
