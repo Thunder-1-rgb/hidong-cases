@@ -202,6 +202,14 @@ var CASES_DATA = {"cases":[{"id":"BR_001","name":"广东佛山张槎商会可视
     });
     sel.appendChild(frag);
   }
+  var PRODUCT_KW={'无纸化会议':['无纸化'],'拼接处理器':['拼接'],'智能中控':['中控'],'分布式系统':['分布式'],'多媒体服务器':['多媒体'],'音频扩声':['音频','扩声'],'可视化系统':['可视化'],'电源管理':['电源']};
+  function matchProduct(c,prd){
+    if(c.product_category&&c.product_category.indexOf(prd)!==-1) return true;
+    var kws=PRODUCT_KW[prd];
+    if(!kws||!kws.length) return false;
+    var prods=c.products||'';
+    return kws.some(function(k){return prods.indexOf(k)!==-1;});
+  }
   function applyFilters(){
     var ind=$id('filterIndustry').value;
     var scn=$id('filterScenario').value;
@@ -211,7 +219,7 @@ var CASES_DATA = {"cases":[{"id":"BR_001","name":"广东佛山张槎商会可视
       if(ind && c.industry!==ind) return false;
       if(scn && c.scenario!==scn) return false;
       if(reg && c.region.indexOf(reg)!==0) return false;
-      if(prd && (!c.product_category||c.product_category.indexOf(prd)===-1)) return false;
+      if(prd && !matchProduct(c,prd)) return false;
       return true;
     });
     log('筛选完成: '+filteredCases.length+' 条');
