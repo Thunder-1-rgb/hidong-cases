@@ -22,7 +22,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 .header .stats{font-size:13px;opacity:.85}
 
-.filter-bar{background:#fff;padding:10px 24px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:52px;z-index:99}
+.filter-bar{background:#fff;padding:10px 24px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 
 .filter-bar label{font-size:13px;color:#666;font-weight:500}
 
@@ -150,6 +150,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 .error{text-align:center;padding:40px;color:#e53935;font-size:14px}
 
+.sticky-wrap{position:sticky;top:52px;z-index:99;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+
 .toolbar{display:flex;gap:8px;padding:8px 24px;align-items:center;flex-wrap:wrap}
 
 .toolbar .tb-btn{padding:6px 14px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;background:#fff;cursor:pointer;color:#666}
@@ -208,6 +210,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
 
 </div>
 
+<div class="sticky-wrap">
+
 <div class="filter-bar">
 
   <label>行业</label>
@@ -243,6 +247,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei","PingFang SC
   <button class="tb-btn primary" id="btnExportPDF" disabled>导出选中案例 PDF</button>
 
   <span id="selectCount" style="font-size:13px;color:#666;margin-left:8px"></span>
+
+</div>
 
 </div>
 
@@ -726,9 +732,7 @@ var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[], selecte
 
         (c.description?'<h4>案例描述</h4><p>'+c.description+'</p>':'')+
 
-      '</div>'+
-
-      '<div class="source">来源: '+(c.source_ppt||'未知')+'</div>';
+      '</div>';
 
   }
 
@@ -1153,8 +1157,6 @@ var allCases=[], filteredCases=[], currentSlide=0, currentCaseImages=[], selecte
           (c.description?'<div style="margin-bottom:10px;"><span style="font-size:12px;color:#999;">案例描述</span><p style="font-size:12px;color:#333;line-height:1.8;margin:4px 0 0 0;">'+c.description+'</p></div>':'')+
 
           imgHtml+
-
-          (c.source_ppt?'<div style="margin-top:8px;font-size:11px;color:#bbb;border-top:1px solid #eee;padding-top:6px;">来源: '+c.source_ppt+'</div>':'')+
 
           '<div style="position:absolute;bottom:16px;right:30px;font-size:11px;color:#999;">第 '+(idx+1)+'/'+total+' 页</div>'+
 
